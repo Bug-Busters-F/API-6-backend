@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Relatório de validação e processamento de upload de planilhas/CSVs")
 public record RelatorioImportacaoResponse(
-    @Schema(description = "Nome do arqiuvo submetido", example = "BASE_VENDAS_OUT25.csv")
+    @Schema(description = "Nome do arquivo submetido", example = "BASE_VENDAS_OUT25.csv")
     String nomeArquivo,
 
     @Schema(description = "Tipo de base", example = "VENDAS")
@@ -38,7 +38,7 @@ public record RelatorioImportacaoResponse(
         String campo,
 
         @Schema(description = "Motivo da falha", example = "Canal não reconhecido ou em branco.")
-        String nativo,
+        String motivo,
 
         @Schema(description = "Severidade da falha", example = "IMPEDITIVO")
         SeveridadeInconsistencia severidade

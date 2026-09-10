@@ -22,7 +22,7 @@ public record ApiErrorResponse(
     @Schema(description = "Caminho da URI que gerou o erro", example = "/api/v1/regras")
     String path,
     
-    @Schema(description = "Detalhamento por campo (quando houver falhas de validação")
+    @Schema(description = "Detalhamento por campo (quando houver falhas de validação)")
     List<CampoInvalidoDTO> validacoes
 ) {
     public record CampoInvalidoDTO(String campo, String motivo) {}
