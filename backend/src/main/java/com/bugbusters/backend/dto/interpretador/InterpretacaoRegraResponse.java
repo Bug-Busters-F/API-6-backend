@@ -1,28 +1,27 @@
 package com.bugbusters.backend.dto.interpretador;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-
-@Schema(description = "JSON estruturado retornado pelo serviço de IA para pré-visualização")
+@Schema(description = "Proposta estruturada extraída pela IA com pendências apontadas")
 public record InterpretacaoRegraResponse(
-    @Schema(description = "Canal identificado", example = "ecommerce")
-    String canal,
+        @Schema(description = "Canal padronizado identificado", example = "ECOMMERCE")
+        String canal,
 
-    @Schema(description = "Taxa decimal deduzida (ex: 0.05 para 5%", example = "0.0500")
-    BigDecimal taxa,
+        @Schema(description = "Taxa percentual em formato decimal (0.0500 = 5%)", example = "0.0500")
+        BigDecimal taxa,
 
-    @Schema(description = "Data de início inferida", example = "2026-12-01")
-    LocalDate dataInicio,
+        @Schema(description = "Data de início da vigência inferida", example = "2026-12-01")
+        LocalDate dataInicio,
 
-    @Schema(description = "Data de término inferida", example = "2026-12-31")
-    LocalDate dataFim,
+        @Schema(description = "Data de fim da vigência inferida", example = "2026-12-31")
+        LocalDate dataFim,
 
-    @Schema(description = "Nível de confiança da extração (0.0 a 1.0)", example = "0.95")
-    BigDecimal confianca,
+        @Schema(description = "Score de confiança do modelo (0.00 a 1.00)", example = "0.95")
+        BigDecimal confianca,
 
-    @Schema(description = "Pendências ou ambiguidades detectadas pela IA que exigem confirmação do usuário")
-    List<String> pendencias
+        @Schema(description = "Lista de pendências, campos faltantes ou inconsistências que exigem revisão humana")
+        List<String> pendencias
 ) {}

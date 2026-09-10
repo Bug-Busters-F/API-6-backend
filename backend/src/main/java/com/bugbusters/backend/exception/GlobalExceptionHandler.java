@@ -12,10 +12,27 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.bugbusters.backend.dto.error.ApiErrorResponse;
 import com.bugbusters.backend.dto.error.ApiErrorResponse.CampoInvalidoDTO;
 
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import jakarta.servlet.http.HttpServletRequest;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+
+        ApiErrorResponse error = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                "Corpo da requisição inválido ou mal formatado.",
+                request.getRequestURI(),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidationException(
@@ -34,6 +51,38 @@ public class GlobalExceptionHandler {
                 "Dados de entrada inválidos.",
                 request.getRequestURI(),
                 validacoes
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(
+            ResourceNotFoundException ex, HttpServletRequest request) {
+
+        ApiErrorResponse error = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage(),
+                request.getRequestURI(),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiErrorResponse> handleBusinessException(
+            BusinessException ex, HttpServletRequest request) {
+
+        ApiErrorResponse error = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                ex.getMessage(),
+                request.getRequestURI(),
+                List.of()
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -69,5 +118,33 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
+    @ExceptionHandler(AiServiceUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiUnavailable(AiServiceUnavailableException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                "Serviço de IA Indisponível",
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+    }
+
+    @ExceptionHandler(AiTimeoutException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiTimeout(AiTimeoutException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.GATEWAY_TIMEOUT.value(),
+                "Tempo Limite Excedido",
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(error);
     }
 }

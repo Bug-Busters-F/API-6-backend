@@ -25,9 +25,19 @@ class ControllerRoutesTest {
 
     private MockMvc mockMvc;
 
+    @Autowired
+    private org.springframework.web.client.RestClient.Builder aiRestClientBuilder;
+
+    @Autowired
+    private com.bugbusters.backend.service.client.AiServiceClient aiServiceClient;
+
+    private org.springframework.test.web.client.MockRestServiceServer mockServer;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        mockServer = org.springframework.test.web.client.MockRestServiceServer.bindTo(aiRestClientBuilder).build();
+        aiServiceClient.setAiRestClient(aiRestClientBuilder.build());
     }
 
     // ==========================================
@@ -162,9 +172,25 @@ class ControllerRoutesTest {
     @Test
     @DisplayName("POST /api/v1/interpretador/extrair-regra - Deve extrair parâmetros com 200 OK")
     void deveInterpretarRegra() throws Exception {
+        String respostaSimuladaPython = """
+            {
+              "canal": "ecommerce",
+              "taxa": 0.0500,
+              "dataInicio": "2026-12-01",
+              "dataFim": "2026-12-31",
+              "confianca": 0.98,
+              "pendencias": []
+            }
+            """;
+
+        mockServer.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo("http://localhost:8000/api/v1/interpretar"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.method(org.springframework.http.HttpMethod.POST))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(respostaSimuladaPython, MediaType.APPLICATION_JSON));
+
         String payload = """
             {
-                "textoLivre": "comissão de 5% no ecommerce para dezembro"
+                "texto": "comissão de 5% no ecommerce para dezembro",
+                "contexto": {}
             }
             """;
 
@@ -172,8 +198,8 @@ class ControllerRoutesTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.canal").value("ecommerce"))
-                .andExpect(jsonPath("$.taxa").value(0.0500))
+                .andExpect(jsonPath("$.canal").value("ECOMMERCE"))
+                .andExpect(jsonPath("$.taxa").value(0.05))
                 .andExpect(jsonPath("$.dataInicio").value("2026-12-01"))
                 .andExpect(jsonPath("$.dataFim").value("2026-12-31"))
                 .andExpect(jsonPath("$.confianca").value(0.98));
@@ -184,7 +210,7 @@ class ControllerRoutesTest {
     void deveRejeitarTextoLivreVazio() throws Exception {
         String payload = """
             {
-                "textoLivre": "   "
+                "texto": "   "
             }
             """;
 
@@ -193,7 +219,7 @@ class ControllerRoutesTest {
                 .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.validacoes[0].campo").value("textoLivre"));
+                .andExpect(jsonPath("$.validacoes[0].campo").value("texto"));
     }
 
     // ==========================================
@@ -219,5 +245,163 @@ class ControllerRoutesTest {
                 .andExpect(jsonPath("$.inconsistencias[0].campo").value("canal"))
                 .andExpect(jsonPath("$.inconsistencias[0].motivo").value("Canal não preenchido; atribuído canal padrão."))
                 .andExpect(jsonPath("$.inconsistencias[0].severidade").value("AVISO"));
+    }
+
+    // ==========================================
+    // 5. Campanha Controller
+    // ==========================================
+    @Test
+    @DisplayName("POST /api/v1/campanhas - Deve cadastrar campanha com sucesso (201) e regra em DRAFT")
+    void deveCriarCampanhaValida() throws Exception {
+        String payload = """
+            {
+                "titulo": "Campanha Black Friday 2026",
+                "textoOriginal": "Comissão de 5% para vendas no e-commerce em novembro",
+                "canal": "ECOMMERCE",
+                "taxa": 0.0500,
+                "dataInicio": "2026-11-01",
+                "dataFim": "2026-11-30"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/campanhas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(header().exists("Location"))
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.titulo").value("Campanha Black Friday 2026"))
+                .andExpect(jsonPath("$.estado").value("DRAFT"))
+                .andExpect(jsonPath("$.regra.canal").value("ECOMMERCE"))
+                .andExpect(jsonPath("$.regra.taxa").value(0.0500))
+                .andExpect(jsonPath("$.regra.status").value("DRAFT"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/campanhas - Deve calcular dataFim (+30 dias) quando omitida")
+    void deveCalcularDataFimCampanhaQuandoOmitida() throws Exception {
+        String payload = """
+            {
+                "titulo": "Campanha Sem Fim",
+                "textoOriginal": "Comissão de 6% no varejo físico",
+                "canal": "LOJA_FISICA",
+                "taxa": 0.0600,
+                "dataInicio": "2026-10-01"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/campanhas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.dataInicio").value("2026-10-01"))
+                .andExpect(jsonPath("$.dataFim").value("2026-10-31"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/campanhas - Deve rejeitar dados inválidos com 400 Bad Request")
+    void deveRejeitarCampanhaInvalida() throws Exception {
+        String payload = """
+            {
+                "titulo": "",
+                "textoOriginal": "",
+                "canal": "",
+                "taxa": -0.05
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/campanhas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validacoes", hasSize(greaterThan(0))));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/campanhas - Deve rejeitar período incoerente com 400 Bad Request")
+    void deveRejeitarPeriodoIncoerente() throws Exception {
+        String payload = """
+            {
+                "titulo": "Campanha Datas Invertidas",
+                "textoOriginal": "Texto da regra",
+                "canal": "ECOMMERCE",
+                "taxa": 0.0500,
+                "dataInicio": "2026-12-01",
+                "dataFim": "2026-11-01"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/campanhas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(containsString("Período incoerente")));
+    }
+
+    @Test
+    @DisplayName("GET, PUT e DELETE /api/v1/campanhas - Ciclo completo de vida da campanha")
+    void deveExecutarCicloDeVidaCampanha() throws Exception {
+        // 1. Criar
+        String criarPayload = """
+            {
+                "titulo": "Campanha Ciclo Vida",
+                "textoOriginal": "Texto original",
+                "canal": "APP",
+                "taxa": 0.0400,
+                "dataInicio": "2026-09-01",
+                "dataFim": "2026-09-30"
+            }
+            """;
+
+        String postResponse = mockMvc.perform(post("/api/v1/campanhas")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(criarPayload))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        // Extrai o ID criado (ex: "id": 1)
+        long campanhaId = Long.parseLong(postResponse.replaceAll(".*\"id\":\\s*(\\d+).*", "$1"));
+
+        // 2. Buscar por ID
+        mockMvc.perform(get("/api/v1/campanhas/" + campanhaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.titulo").value("Campanha Ciclo Vida"))
+                .andExpect(jsonPath("$.regra.canal").value("APP"));
+
+        // 3. Listar ativas
+        mockMvc.perform(get("/api/v1/campanhas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThan(0))));
+
+        // 4. Atualizar
+        String atualizarPayload = """
+            {
+                "titulo": "Campanha Ciclo Vida Atualizada",
+                "textoOriginal": "Texto alterado",
+                "canal": "APP_PREMIUM",
+                "taxa": 0.0600,
+                "dataInicio": "2026-09-01",
+                "dataFim": "2026-10-15"
+            }
+            """;
+
+        mockMvc.perform(put("/api/v1/campanhas/" + campanhaId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(atualizarPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.titulo").value("Campanha Ciclo Vida Atualizada"))
+                .andExpect(jsonPath("$.regra.canal").value("APP_PREMIUM"))
+                .andExpect(jsonPath("$.regra.taxa").value(0.0600));
+
+        // 5. Exclusão lógica (soft delete)
+        mockMvc.perform(delete("/api/v1/campanhas/" + campanhaId))
+                .andExpect(status().isNoContent());
+
+        // 6. Tentar buscar após exclusão lógica deve retornar 404
+        mockMvc.perform(get("/api/v1/campanhas/" + campanhaId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
     }
 }
